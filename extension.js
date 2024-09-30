@@ -2,6 +2,12 @@
 
 const vscode = require("vscode");
 const axios = require("axios");
+const { generateText } = require("ai");
+const { createOpenAI } = require("@ai-sdk/openai");
+const { generateObject } = require("ai");
+const { z } = require("zod");
+
+let openai = null;
 
 let statusBarItem;
 
@@ -17,6 +23,8 @@ function activate(context) {
     async function () {
       diagnosticCollection.clear();
 
+      console.debug("[chineseTypoChecker] Checking Chinese typos...");
+
       const apiKey = vscode.workspace
         .getConfiguration("chineseTypoChecker")
         .get("llamaApiKey");
@@ -31,8 +39,18 @@ function activate(context) {
         return; // No open text editor
       }
 
+      openai = openai ?? createOpenAI({
+        apiKey: apiKey,
+        baseUrl: baseUrl,
+      });
+
       const chineseLines = extractChineseLines(editor);
-      const corrections = await checkChineseText(chineseLines, baseUrl, apiKey, model);
+      const corrections = await checkChineseTextUsingStructuralOutput(
+        chineseLines,
+        baseUrl,
+        apiKey,
+        model
+      );
       applyCorrections(editor, corrections, chineseLines);
     }
   );
@@ -176,35 +194,44 @@ function extractChineseLines(editor) {
   return chineseLines;
 }
 
-async function checkChineseText(chineseLines, baseUrl, apiKey, model) {
-  // Call OpenAI API
-  const responses = await axios.post(
-    `${baseUrl}/api/chat`,
-    {
-      model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "修正下列数组中每个元素文字中的错别字，并以json格式返回结果：{'corrections':[{errorText: '错别字', correctText: '正确字', index:0}]}",
-        },
-        { role: "user", content: JSON.stringify(chineseLines) },
-      ],
-      stream: false,
-      temperature: 0,
-      format: "json",
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-    }
-  );
+async function checkChineseTextUsingStructuralOutput(chineseLines, baseUrl, apiKey, model) {
+  // @see https://sdk.vercel.ai/providers/ai-sdk-providers/openai
+  const customModel = openai.chat(model, {
+    structuredOutputs: true,
+  });
 
-  // Process API responses and extract corrections
-  const corrections = JSON.parse(responses.data.message.content);
-  // ... process responses and fill corrections array
-  return corrections.corrections;
+  const prompt = JSON.stringify(
+    chineseLines.map((line, index) => {
+      return {
+        content: line.content,
+        index: index
+      }
+    })
+  );
+  const result = await generateObject({
+    model: customModel,
+    // system: "修正下列数组中每个元素文字中的错别字，并以json格式返回结果：{'corrections':[{errorText: '错别字', correctText: '正确字', index:0}]}",
+    system: "修正下列数组中每个元素文字中的错别字.",
+    schemaName: "grammarSuggestions",
+    schema: z.object({
+      name: z.string(),
+      suggestions: z.array(
+        z.object({
+          errorText: z.string(),
+          correctText: z.string(),
+          index: z
+            .number()
+            .describe("The index of the array element which contains the error text."),
+        })
+      ),
+    }),
+    prompt: prompt,
+    mode: "json",
+    temperature: 0.2,
+  });
+
+  console.debug("API response:", result);
+  return result.object.suggestions;
 }
 
 function applyCorrections(editor, corrections, chineseLines) {
@@ -274,7 +301,7 @@ function registerApplyFixAndClearDiagnosticsCommand(context) {
   context.subscriptions.push(applyFixAndClearDiagnostics);
 }
 
-function deactivate() {}
+function deactivate() { }
 
 module.exports = {
   activate,
