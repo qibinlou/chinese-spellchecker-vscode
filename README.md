@@ -1,5 +1,13 @@
 # 中文错别字检查器
 
+
+## 关于这个Fork版本
+[2024.9.30] 更新了核心代码逻辑，默认使用gpt-4o系列的模型，提高了性能和鲁棒性。这个版本的插件还没有发布，需要自己打包后本地加载。
+
+⚠️ 下面的文档出自原repo，尚未更新，请明辨。
+
+
+
 [![版本](https://vsmarketplacebadges.dev/version/discountry.chinese-typo-checker.svg)](https://marketplace.visualstudio.com/items?itemName=discountry.chinese-typo-checker)
 [![安装](https://vsmarketplacebadges.dev/installs/discountry.chinese-typo-checker.svg)](https://marketplace.visualstudio.com/items?itemName=discountry.chinese-typo-checker)
 [![评级](https://vsmarketplacebadges.dev/rating-short/discountry.chinese-typo-checker.svg)](https://marketplace.visualstudio.com/items?itemName=discountry.chinese-typo-checker)
